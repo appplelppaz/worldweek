@@ -116,10 +116,13 @@
     return '<div class="note note-g"><b>文法</b><ul>' + items + '</ul></div>';
   }
 
-  function renderSentence(s, lang) {
+  function renderSentence(s, lang, a) {
     var li = h('li', 'sent');
     li.dataset.lang = lang;
     li.dataset.sid = s.id || '';
+    /* 読み上げ用の素のテキスト。DOM から取り出すと、中国語のルビ（ピンイン）が
+       混ざってしまうため、描画時に元の文をそのまま持たせておく。 */
+    li.dataset.speak = plain(s.text);
 
     var idx = vocabIndexFor(s);
     var o = h('p', 'o-line');
@@ -127,10 +130,17 @@
 
     var speak = h('button', 'speak', '🔊');
     speak.type = 'button';
-    speak.title = '読み上げ';
-    speak.setAttribute('aria-label', '読み上げ');
-    speak.addEventListener('click', function () { say(plain(s.text), lang); });
+    speak.title = 'この文を読み上げる';
+    speak.setAttribute('aria-label', 'この文を読み上げる');
+    speak.addEventListener('click', function () { sayOne(li); });
     o.appendChild(speak);
+
+    var fromHere = h('button', 'speak', '⏬');
+    fromHere.type = 'button';
+    fromHere.title = 'この文から記事の最後まで続けて読む';
+    fromHere.setAttribute('aria-label', 'この文から続けて読む');
+    fromHere.addEventListener('click', function () { playArticle(a, li); });
+    o.appendChild(fromHere);
     li.appendChild(o);
 
     if (s.literal) li.appendChild(h('p', 'l-line', esc(s.literal)));
@@ -169,12 +179,20 @@
       '<p class="ja-title">' + esc(a.headline.ja) + '</p>';
     art.appendChild(head);
 
+    if (WGLSpeech.supported) {
+      var listen = h('button', 'mini listen', '▶ この記事を通して聞く');
+      listen.type = 'button';
+      listen.dataset.article = a.id;
+      listen.addEventListener('click', function () { playArticle(a); });
+      head.appendChild(listen);
+    }
+
     if (a.why) art.appendChild(h('div', 'why', '<b>Why this story matters</b>' + esc(a.why)));
 
     /* original article, sentence by sentence */
     art.appendChild(h('h4', 'sub', 'Original Article <span>原文（1文ずつ・訳と解説つき）</span>'));
     var ul = h('ul', 'sents');
-    (a.body || []).forEach(function (s) { ul.appendChild(renderSentence(s, a.lang)); });
+    (a.body || []).forEach(function (s) { ul.appendChild(renderSentence(s, a.lang, a)); });
     art.appendChild(ul);
 
     /* japanese guide */
@@ -360,7 +378,9 @@
         '<p class="tip">' + esc(s.tip) + '</p>';
       var b = h('button', 'mini', '🔊 読み上げ');
       b.type = 'button';
-      b.addEventListener('click', function () { say(plain(s.text), s.lang); });
+      b.addEventListener('click', function () {
+        WGLSpeech.play([{ lang: s.lang, text: plain(s.text) }], { onState: drawPlayer, onEnd: drawPlayer });
+      });
       box.appendChild(b);
       wrap.appendChild(box);
     });
@@ -390,6 +410,7 @@
 
   function render() {
     var stage = el('main');
+    if (WGLSpeech.supported) WGLSpeech.stop();
     stage.innerHTML = '';
     POPDATA = {};
 
@@ -484,20 +505,194 @@
     });
   }
 
-  /* ---------- speech ---------- */
+  /* ---------- 読み上げ ---------- */
 
-  function say(text, lang) {
-    if (!('speechSynthesis' in global)) return;
-    global.speechSynthesis.cancel();
-    var u = new SpeechSynthesisUtterance(text);
-    u.lang = langOf(lang).voice;
-    u.rate = 0.92;
-    var want = u.lang.slice(0, 2);
-    var v = (global.speechSynthesis.getVoices() || []).filter(function (x) {
-      return x.lang && x.lang.slice(0, 2).toLowerCase() === want;
-    })[0];
-    if (v) u.voice = v;
-    global.speechSynthesis.speak(u);
+  /* 画面上の文ブロックから再生用の並びを作る */
+  function itemsFrom(nodes) {
+    return Array.prototype.map.call(nodes, function (li) {
+      return { el: li, lang: li.dataset.lang, text: li.dataset.speak || '' };
+    }).filter(function (x) { return x.text.trim(); });
+  }
+
+  var HANDLERS = {
+    onSentence: function (i, item) {
+      document.querySelectorAll('.sent.speaking').forEach(function (n) { n.classList.remove('speaking'); });
+      if (!item.el) return;
+      item.el.classList.add('speaking');
+      var r = item.el.getBoundingClientRect();
+      if (r.top < 150 || r.bottom > global.innerHeight - 90) {
+        item.el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    },
+    onState: drawPlayer,
+    onEnd: function () {
+      document.querySelectorAll('.sent.speaking').forEach(function (n) { n.classList.remove('speaking'); });
+      drawPlayer(WGLSpeech.state());
+    }
+  };
+
+  /** 1文だけ読む（設定したリピート回数ぶん繰り返す） */
+  function sayOne(li) {
+    if (!WGLSpeech.supported) { noVoiceNotice(); return; }
+    WGLSpeech.play(itemsFrom([li]), HANDLERS);
+  }
+
+  /** 記事を通して読む。from を渡すとその文から始める */
+  function playArticle(a, from) {
+    if (!WGLSpeech.supported) { noVoiceNotice(); return; }
+    var art = document.getElementById(a.id);
+    if (!art) return;
+    var all = itemsFrom(art.querySelectorAll('.sent'));
+    if (from) {
+      var i = all.findIndex(function (x) { return x.el === from; });
+      if (i > 0) all = all.slice(i);
+    }
+    WGLSpeech.play(all, HANDLERS);
+  }
+
+  /** いま画面に出ている記事すべてを通して読む */
+  function playAll() {
+    if (!WGLSpeech.supported) { noVoiceNotice(); return; }
+    WGLSpeech.play(itemsFrom(document.querySelectorAll('.stage .sent')), HANDLERS);
+  }
+
+  function noVoiceNotice() {
+    alert('このブラウザは音声合成に対応していないため、読み上げを再生できません。');
+  }
+
+  /* ---------- プレーヤー ---------- */
+
+  function drawPlayer(st) {
+    st = st || WGLSpeech.state();
+    var bar = el('player');
+    if (!st.running) { bar.hidden = true; bar.innerHTML = ''; return; }
+
+    var L = langOf(st.lang || 'en');
+    var pos = (st.index + 1) + ' / ' + st.total;
+    var rep = st.repeat > 1 ? '<span class="p-rep">' + (st.round + 1) + '/' + st.repeat + '回目</span>' : '';
+
+    bar.hidden = false;
+    bar.style.setProperty('--c', L.color);
+    bar.innerHTML =
+      '<button class="p-btn" data-act="prev" type="button" title="前の文" aria-label="前の文">⏮</button>' +
+      '<button class="p-btn p-main" data-act="toggle" type="button" title="' +
+        (st.paused ? '再開' : '一時停止') + '" aria-label="' + (st.paused ? '再開' : '一時停止') + '">' +
+        (st.paused ? '▶' : '⏸') + '</button>' +
+      '<button class="p-btn" data-act="next" type="button" title="次の文" aria-label="次の文">⏭</button>' +
+      '<span class="p-pos"><b>' + esc(L.flag + ' ' + L.label) + '</b> ' + pos + rep + '</span>' +
+      '<label class="p-rate">速度' +
+        '<select data-act="rate" aria-label="読み上げ速度">' +
+          [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.25].map(function (r) {
+            return '<option value="' + r + '"' +
+              (Math.abs(r - WGLSpeech.prefs.rate) < 0.001 ? ' selected' : '') + '>' + r + '×</option>';
+          }).join('') +
+        '</select></label>' +
+      '<button class="p-btn p-stop" data-act="stop" type="button" title="停止" aria-label="停止">■</button>';
+  }
+
+  function bindPlayer() {
+    el('player').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-act]');
+      if (!b || b.tagName === 'SELECT') return;
+      var act = b.dataset.act;
+      if (act === 'toggle') WGLSpeech.toggle();
+      else if (act === 'stop') WGLSpeech.stop();
+      else if (act === 'prev') WGLSpeech.jump(-1);
+      else if (act === 'next') WGLSpeech.jump(1);
+    });
+    el('player').addEventListener('change', function (e) {
+      if (e.target.dataset.act === 'rate') WGLSpeech.set('rate', e.target.value);
+    });
+  }
+
+  /* ---------- 音声設定パネル ---------- */
+
+  function drawAudioPanel() {
+    var panel = el('audioPanel');
+    var rows = LANG_ORDER.map(function (code) {
+      var L = langOf(code);
+      var list = WGLSpeech.voicesFor(code);
+      var cur = WGLSpeech.pickVoice(code);
+      if (!list.length) {
+        return '<div class="a-row"><span class="a-lang">' + L.flag + ' ' + esc(L.ja) + '</span>' +
+               '<span class="a-none">この端末に音声が入っていません</span></div>';
+      }
+      return '<div class="a-row"><span class="a-lang">' + L.flag + ' ' + esc(L.ja) + '</span>' +
+        '<select data-voice="' + code + '" aria-label="' + esc(L.ja) + 'の音声">' +
+          list.map(function (v) {
+            return '<option value="' + esc(v.voiceURI) + '"' +
+              (cur && v.voiceURI === cur.voiceURI ? ' selected' : '') + '>' +
+              esc(v.name) + '（' + esc(v.lang) + '）</option>';
+          }).join('') +
+        '</select></div>';
+    }).join('');
+
+    panel.innerHTML =
+      '<button class="x" type="button" aria-label="閉じる">×</button>' +
+      '<h6>読み上げの設定</h6>' +
+      '<div class="a-row"><span class="a-lang">速度</span>' +
+        '<select data-set="rate" aria-label="読み上げ速度">' +
+          [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.25].map(function (r) {
+            return '<option value="' + r + '"' +
+              (Math.abs(r - WGLSpeech.prefs.rate) < 0.001 ? ' selected' : '') + '>' + r + '×</option>';
+          }).join('') +
+        '</select></div>' +
+      '<div class="a-row"><span class="a-lang">リピート</span>' +
+        '<select data-set="repeat" aria-label="1文を読む回数">' +
+          [1, 2, 3, 4, 5].map(function (n) {
+            return '<option value="' + n + '"' + (n === WGLSpeech.prefs.repeat ? ' selected' : '') + '>' +
+              (n === 1 ? '1回（繰り返さない）' : n + '回') + '</option>';
+          }).join('') +
+        '</select></div>' +
+      '<div class="a-row"><span class="a-lang">文の間</span>' +
+        '<select data-set="gap" aria-label="文と文のあいだの間">' +
+          [[0, 'なし'], [400, '0.4秒'], [700, '0.7秒'], [1200, '1.2秒'], [2000, '2秒'], [3000, '3秒（音読用）']]
+            .map(function (g) {
+              return '<option value="' + g[0] + '"' +
+                (g[0] === WGLSpeech.prefs.gap ? ' selected' : '') + '>' + g[1] + '</option>';
+            }).join('') +
+        '</select></div>' +
+      '<p class="a-note">リピートと「文の間」を上げると、シャドーイングの練習に使えます。</p>' +
+      '<h6 class="a-sub">言語ごとの声</h6>' + rows +
+      '<p class="a-note">声は端末にインストールされているものだけが選べます。' +
+      '見つからない言語は、OSの音声設定から追加できます。</p>';
+  }
+
+  function bindAudioPanel() {
+    var panel = el('audioPanel');
+    var btn = el('btnAudio');
+
+    function open() {
+      drawAudioPanel();
+      panel.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      var r = btn.getBoundingClientRect();
+      panel.style.top = (r.bottom + global.scrollY + 8) + 'px';
+      panel.style.left = Math.max(8, Math.min(r.left + global.scrollX - 120,
+        global.innerWidth - panel.offsetWidth - 14)) + 'px';
+    }
+    function close() {
+      panel.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+    }
+
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      panel.hidden ? open() : close();
+    });
+    panel.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (e.target.classList.contains('x')) close();
+    });
+    panel.addEventListener('change', function (e) {
+      var t = e.target;
+      if (t.dataset.set) WGLSpeech.set(t.dataset.set, t.value);
+      else if (t.dataset.voice) WGLSpeech.setVoice(t.dataset.voice, t.value);
+    });
+    document.addEventListener('click', function () { if (!panel.hidden) close(); });
+
+    /* 音声リストは遅れて届くことがあるので、届いたら描き直す */
+    WGLSpeech.onVoicesReady(function () { if (!panel.hidden) drawAudioPanel(); });
   }
 
   /* ---------- vocabulary popover ---------- */
@@ -622,7 +817,24 @@
 
     el('tocFab').addEventListener('click', function () { el('toc').classList.toggle('open'); });
 
-    if ('speechSynthesis' in global) global.speechSynthesis.getVoices();
+    /* 読み上げ */
+    if (WGLSpeech.supported) {
+      bindPlayer();
+      bindAudioPanel();
+      el('btnListen').addEventListener('click', function () {
+        var st = WGLSpeech.state();
+        st.running ? WGLSpeech.stop() : playAll();
+      });
+      document.addEventListener('keydown', function (e) {
+        var typing = /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName);
+        if (typing) return;
+        if (e.key === 'Escape') WGLSpeech.stop();
+        if (e.key === 'k' && WGLSpeech.state().running) { e.preventDefault(); WGLSpeech.toggle(); }
+      });
+    } else {
+      el('btnListen').hidden = true;
+      el('btnAudio').hidden = true;
+    }
 
     render();
   }
