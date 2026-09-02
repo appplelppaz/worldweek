@@ -565,6 +565,7 @@
   function drawPlayer(st) {
     st = st || WGLSpeech.state();
     var bar = el('player');
+    document.body.classList.toggle('playing', !!st.running);
     if (!st.running) { bar.hidden = true; bar.innerHTML = ''; return; }
 
     var L = langOf(st.lang || 'en');
@@ -816,6 +817,23 @@
     });
 
     el('tocFab').addEventListener('click', function () { el('toc').classList.toggle('open'); });
+
+    /* 狭い画面では言語タブと学習モードが横スクロールになる。
+       右端のフェードで、まだ続きがあることを示す。 */
+    ['langbar', 'studybar'].forEach(function (id) {
+      var bar = id === 'langbar' ? el('langbar') : document.querySelector('.studybar');
+      if (!bar) return;
+      var fade = h('span', 'mast-wrap-fade');
+      fade.setAttribute('aria-hidden', 'true');
+      bar.appendChild(fade);
+      function mark() {
+        var done = bar.scrollLeft + bar.clientWidth >= bar.scrollWidth - 2;
+        bar.classList.toggle('at-end', done);
+      }
+      bar.addEventListener('scroll', mark, { passive: true });
+      global.addEventListener('resize', mark);
+      mark();
+    });
 
     /* 読み上げ */
     if (WGLSpeech.supported) {

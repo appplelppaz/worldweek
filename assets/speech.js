@@ -108,8 +108,33 @@
     return v ? v.lang : (LOCALES[lang] || ['en'])[0];
   }
 
+  /* ---------- iOS の解錠 ----------
+     iOS Safari は、最初の speak() がユーザー操作と同じ処理の中から
+     呼ばれないと以後いっさい発話しない。無音の発話を最初のタップで
+     流し込んで、合成エンジンを起こしておく。 */
+
+  var unlocked = false;
+
+  function unlock() {
+    if (unlocked || !OK) return;
+    unlocked = true;
+    try {
+      var u = new SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      SYNTH.speak(u);
+      SYNTH.cancel();
+    } catch (e) { /* 解錠できなくても通常の再生は試みる */ }
+  }
+
+  if (OK) {
+    ['touchend', 'pointerdown', 'mousedown', 'keydown'].forEach(function (ev) {
+      global.addEventListener(ev, unlock, { once: true, capture: true, passive: true });
+    });
+  }
+
   /* ---------- 再生 ---------- */
 
+  var sync = false;      // 次の発話をユーザー操作と同じ処理の中で行うか
   var seq = [];          // 再生中の並び [{ text, lang, el }]
   var at = -1;           // いま読んでいる位置
   var round = 0;         // 同じ文の何回目か
@@ -166,11 +191,16 @@
     function once() { if (!finished) { finished = true; done(); } }
     u.onend = once;
     u.onerror = once;
-    /* cancel() 直後の speak() を取りこぼすブラウザがあるので一拍置く */
-    setTimeout(function () {
+
+    function fire() {
       if (!running) return;
       try { SYNTH.speak(u); } catch (e) { once(); }
-    }, 0);
+    }
+
+    /* 1件目はユーザー操作と同じ処理の中で発話する（iOS の要件）。
+       2件目以降は onend から呼ばれるので、cancel() の取りこぼしを
+       避けるために一拍置いてよい。 */
+    if (sync) { sync = false; fire(); } else { setTimeout(fire, 0); }
   }
 
   function step() {
@@ -210,14 +240,16 @@
     hooks = handlers || {};
     at = 0; round = 0;
     running = true; holding = false;
+    sync = true;              // 最初の1件はユーザー操作の文脈のまま発話する
     startKeepAlive();
     step();
+    sync = false;
     return true;
   }
 
   function stop() {
     var was = running;
-    running = false; holding = false;
+    running = false; holding = false; sync = false;
     clearTimer(); stopKeepAlive();
     if (OK) { try { SYNTH.cancel(); } catch (e) {} }
     at = -1; round = 0;
@@ -279,8 +311,13 @@
   /* 画面を離れるときに黙らせる（音声が残り続けるのを防ぐ） */
   global.addEventListener('beforeunload', function () { if (OK) SYNTH.cancel(); });
 
+  /** その言語の音声が端末に入っているか */
+  function hasVoice(lang) { return voicesFor(lang).length > 0; }
+
   global.WGLSpeech = {
     supported: OK,
+    unlock: unlock,
+    hasVoice: hasVoice,
     play: play,
     stop: stop,
     pause: pause,

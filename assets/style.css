@@ -143,7 +143,7 @@ body{
 .toc a.on{color:var(--ink);font-weight:700;border-left-color:var(--c,var(--accent));background:var(--paper-2)}
 .toc a small{display:block;color:var(--ink-3);font-size:10.5px;font-weight:400}
 
-.stage{padding:26px 34px 90px;min-width:0}
+.stage{--pad-x:34px;padding:26px 34px 90px;min-width:0}
 
 /* ---------- generic blocks ---------- */
 .kicker{
@@ -380,13 +380,13 @@ body.no-gram .note-g,body.no-gram .note-s{display:none}
 .pop .ex em{font-style:normal;color:var(--ink-3);font-size:12px;display:block}
 .pop .x{position:absolute;top:5px;right:8px;border:0;background:none;cursor:pointer;color:var(--ink-3);font-size:16px;line-height:1}
 
-.colophon{border-top:1px solid var(--rule);padding:22px 24px 40px;max-width:1220px;margin:0 auto;color:var(--ink-3);font-size:12px}
+.colophon{--pad-x:24px;border-top:1px solid var(--rule);padding:22px 24px 40px;max-width:1220px;margin:0 auto;color:var(--ink-3);font-size:12px}
 .colophon .tiny{font-size:11px}
 
 /* ---------- responsive ---------- */
 @media (max-width:940px){
   .shell{grid-template-columns:1fr}
-  .stage{padding:20px 18px 80px}
+  .stage{--pad-x:18px;padding:20px 18px 80px}
   .toc{
     position:fixed;inset:0 auto 0 0;width:270px;max-height:none;z-index:60;
     background:var(--paper-2);border-right:1px solid var(--rule-2);
@@ -495,3 +495,148 @@ body.no-gram .note-g,body.no-gram .note-s{display:none}
   .toc-fab{bottom:80px}
 }
 @media print{ .player,.audio-panel{display:none!important} }
+
+/* ============================================================
+   iPhone — ノッチ／ホームインジケータ、ホーム画面からの起動
+   ============================================================ */
+
+/* 固定要素をセーフエリアの内側に収める */
+.player{
+  bottom:calc(16px + env(safe-area-inset-bottom, 0px));
+  padding-left:calc(14px + env(safe-area-inset-left, 0px));
+  padding-right:calc(14px + env(safe-area-inset-right, 0px));
+}
+.toc-fab{
+  right:calc(14px + env(safe-area-inset-right, 0px));
+  bottom:calc(14px + env(safe-area-inset-bottom, 0px));
+}
+.masthead{
+  padding-top:env(safe-area-inset-top, 0px);
+  padding-left:env(safe-area-inset-left, 0px);
+  padding-right:env(safe-area-inset-right, 0px);
+}
+.stage,.colophon{
+  padding-left:max(var(--pad-x, 18px), env(safe-area-inset-left, 0px));
+  padding-right:max(var(--pad-x, 18px), env(safe-area-inset-right, 0px));
+}
+.toc{padding-bottom:calc(60px + env(safe-area-inset-bottom, 0px))}
+
+/* 横向きのときも本文が切り欠きに潜らないように */
+@media (orientation: landscape){
+  .shell{
+    padding-left:env(safe-area-inset-left, 0px);
+    padding-right:env(safe-area-inset-right, 0px);
+  }
+}
+
+/* タップ時の青いハイライトを消し、操作対象は指で押せる大きさにする */
+w,.speak,.mini,.p-btn,.tgl,.toc a,.dd>summary,.ans>summary{
+  -webkit-tap-highlight-color:transparent;
+}
+@media (hover: none){
+  .speak{font-size:16px;padding:2px 7px}
+  .sent .o-line{line-height:1.72}
+  .mini{padding:6px 12px;font-size:12.5px}
+  .p-btn{width:40px;height:40px;font-size:15px}
+  .p-main{width:48px;height:48px;font-size:19px}
+  .player select{padding:6px 8px;font-size:13px}
+  .audio-panel select{padding:7px 8px;font-size:14px}   /* iOS の自動ズームを避けるため 14px 以上 */
+  .a-row{margin-bottom:11px}
+  .tgl{padding:3px 0}
+  .tgl input{width:17px;height:17px}
+}
+
+@media (max-width:640px){
+  .player{
+    bottom:calc(8px + env(safe-area-inset-bottom, 0px));
+    padding-left:calc(10px + env(safe-area-inset-left, 0px));
+    padding-right:calc(10px + env(safe-area-inset-right, 0px));
+  }
+  .toc-fab{bottom:calc(80px + env(safe-area-inset-bottom, 0px))}
+}
+
+/* ホーム画面から起動したとき（アドレスバーがない） */
+@media (display-mode: standalone){
+  .masthead{padding-top:calc(env(safe-area-inset-top, 0px) + 4px)}
+  .colophon{padding-bottom:calc(40px + env(safe-area-inset-bottom, 0px))}
+}
+
+/* ============================================================
+   スマートフォン — ヘッダーとプレーヤーを1行に畳む
+   画面が狭いと見出し・言語タブ・学習モードが折り返して積み上がり、
+   本文より header のほうが大きくなってしまうため。
+   ============================================================ */
+@media (max-width:700px){
+
+  /* 見出しを1行に */
+  .wordmark{font-size:17px;letter-spacing:.04em}
+  .wordmark br{display:none}
+  .wordmark em{margin-left:.28em}
+  .mast-sub{
+    font-size:10px;margin-top:2px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
+  }
+  .mast-inner{padding:9px 14px 7px;gap:0}
+
+  /* 言語タブと学習モードは折り返さず、横スクロールにする */
+  .langbar,.studybar{
+    flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;
+    scrollbar-width:none;-ms-overflow-style:none;
+  }
+  .langbar::-webkit-scrollbar,.studybar::-webkit-scrollbar{display:none}
+  .langbar{padding:0 12px}
+  .langbar button{padding:8px 10px;font-size:12.5px;white-space:nowrap;flex:0 0 auto}
+  .studybar{padding:6px 12px;gap:0 10px;align-items:center}
+  .studybar>*{flex:0 0 auto}
+  .studybar-label{display:none}
+  .studybar-sep{display:none}
+  .tgl{white-space:nowrap}
+  .mini{white-space:nowrap}
+
+  /* 目次まで戻らずに済むよう、スクロール位置の基準を詰める */
+  .article{scroll-margin-top:104px}
+  .toc{top:0}
+}
+
+/* プレーヤーを1行に収める（速度は「音声設定」から変えられる） */
+@media (max-width:560px){
+  .player{
+    flex-wrap:nowrap;gap:7px;
+    left:8px;right:8px;transform:none;max-width:none;
+    justify-content:space-between;
+  }
+  .p-rate{display:none}
+  .p-pos{
+    order:0;width:auto;flex:1 1 auto;text-align:center;
+    font-size:11.5px;overflow:hidden;text-overflow:ellipsis;
+  }
+  .p-pos b{display:block;margin:0 0 1px}
+  .p-rep{margin-left:0}
+}
+
+/* 再生中は目次ボタンをプレーヤーの上に逃がす */
+body.playing .toc-fab{
+  bottom:calc(84px + env(safe-area-inset-bottom, 0px));
+}
+@media (max-width:560px){
+  body.playing .toc-fab{
+    bottom:calc(78px + env(safe-area-inset-bottom, 0px));
+    padding:9px 14px;font-size:12.5px;
+  }
+}
+
+/* 横スクロールできることが分かるよう、右端をぼかす */
+@media (max-width:700px){
+  .langbar,.studybar{position:relative}
+  .mast-wrap-fade{
+    position:absolute;top:0;bottom:0;right:0;width:26px;pointer-events:none;z-index:1;
+  }
+  .langbar .mast-wrap-fade{
+    background:linear-gradient(to right, transparent, var(--paper-2));
+  }
+  .studybar .mast-wrap-fade{
+    background:linear-gradient(to right, transparent, var(--paper));
+  }
+  .langbar.at-end .mast-wrap-fade,.studybar.at-end .mast-wrap-fade{opacity:0}
+  .mast-wrap-fade{transition:opacity .18s}
+}
