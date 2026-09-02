@@ -3,12 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export function loadIssue(dir) {
-  const issue = { data: null, articles: [] };
+  const issue = { data: null, words: {}, articles: [] };
   const WGL = {
     registerIssue: (d) => { issue.data = d; },
+    registerWords: (w) => { issue.words = w || {}; },
     registerArticles: (list) => { issue.articles.push(...list); }
   };
-  const order = ['issue.js', 'en.js', 'zh.js', 'es.js', 'fr.js'];
+  const order = ['issue.js', 'words.js', 'en.js', 'zh.js', 'es.js', 'fr.js'];
   for (const f of order) {
     const p = path.join(dir, f);
     if (!fs.existsSync(p)) throw new Error(`データファイルがありません: ${p}`);

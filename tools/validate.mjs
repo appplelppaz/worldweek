@@ -4,7 +4,7 @@
 import { loadIssue, markedKeys } from './load.mjs';
 
 const dir = process.argv[2] || 'content/issues/2026-w36';
-const { data, articles } = loadIssue(dir);
+const { data, words, articles } = loadIssue(dir);
 
 const errors = [];
 const warns = [];
@@ -17,6 +17,40 @@ for (const k of ['meta', 'sectionTitles', 'cover', 'worldThisWeek', 'feature', '
 for (const l of LANGS) {
   if (!data.sectionTitles?.[l]) errors.push(`issue: sectionTitles.${l} がありません`);
   if (!articles.some(a => a.lang === l)) errors.push(`issue: ${l} の記事が1本もありません（4言語すべて必要）`);
+}
+
+/* --- 単語リスト（各言語20語） --- */
+const WORDS_PER_LANG = 20;
+let wordCount = 0, idiomCount = 0;
+for (const l of LANGS) {
+  const list = words[l];
+  if (!Array.isArray(list)) { errors.push(`words: ${l} のリストがありません`); continue; }
+  if (list.length !== WORDS_PER_LANG) {
+    errors.push(`words.${l}: ${WORDS_PER_LANG}語ちょうど必要です（現在 ${list.length}語）`);
+  }
+  const seenTerm = new Set();
+  list.forEach((w, i) => {
+    const at = `words.${l}[${i}] "${w.term}"`;
+    if (!w.term) errors.push(`${at}: term がありません`);
+    if (seenTerm.has(w.term)) errors.push(`${at}: term が重複しています`);
+    seenTerm.add(w.term);
+    if (!w.ja) errors.push(`${at}: ja（意味）がありません`);
+    if (!w.note) warns.push(`${at}: note（説明）がありません`);
+    if (!['単語', '熟語'].includes(w.kind)) errors.push(`${at}: kind は「単語」か「熟語」にしてください`);
+    if (w.kind === '熟語') idiomCount++; else wordCount++;
+    if (!(w.examples || []).length) warns.push(`${at}: 例文がありません`);
+    (w.examples || []).forEach(e => {
+      if (!e.o || !e.j) errors.push(`${at}: 例文には o と j の両方が必要です`);
+    });
+    if (l === 'zh' && !w.pinyin) errors.push(`${at}: 中国語には pinyin が必要です`);
+    if (w.pinyin) {
+      const chars = Array.from(String(w.term)).filter(c => /[一-鿿]/.test(c)).length;
+      const syl = String(w.pinyin).trim().split(/\s+/).length;
+      if (chars && syl !== chars) {
+        warns.push(`${at}: pinyin の音節数(${syl})が漢字数(${chars})と一致しません`);
+      }
+    }
+  });
 }
 
 /* --- 記事 --- */
@@ -96,6 +130,7 @@ for (const s of data.shadowing || []) {
 const perLang = LANGS.map(l => `${l}:${articles.filter(a => a.lang === l).length}`).join(' ');
 console.log(`\n📚 ${dir}`);
 console.log(`   記事 ${articles.length}本 (${perLang}) / 原文 ${sentences}文 / 語彙 ${vocab}項目 / 文法 ${grammar}項目 / 出典 ${sources}件`);
+console.log(`   単語リスト ${wordCount + idiomCount}語（単語 ${wordCount} / 熟語 ${idiomCount}）× ${LANGS.length}言語`);
 console.log(`   今週の世界 ${data.worldThisWeek.length} / 会話 ${data.conversation.length} / 音読 ${data.shadowing.length} / 復習 ${data.review.length}\n`);
 
 for (const w of warns) console.log(`  ⚠️  ${w}`);

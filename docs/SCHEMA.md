@@ -3,7 +3,32 @@
 記事データは `content/issues/<号>/*.js` にあり、これが唯一の情報源です。
 `MASTER.md` は `tools/build-master.mjs` が生成するので、直接編集しないでください。
 
-読み込み順は `issue.js` → `en.js` → `zh.js` → `es.js` → `fr.js` です（`index.html` の `<script>` の順序＝誌面の順序）。
+読み込み順は `issue.js` → `words.js` → `en.js` → `zh.js` → `es.js` → `fr.js` です。
+
+---
+
+## 単語リスト（`WGL.registerWords({...})`）
+
+単語タブの中身です。**4言語すべてで、ちょうど20語**が必要です（`validate.mjs` が数を検査します）。
+
+```js
+{
+  en: [ {
+    term: 'ease',              // 必須・言語内で一意
+    kind: '単語',               // 必須。'単語' か '熟語'
+    pos: 'v.',                 // 品詞
+    pinyin: 'biǎo shì',        // 中国語は必須。半角スペース区切りで漢字数と合わせる
+    ja: '和らぐ、緩む',          // 必須。短い意味
+    note: '…なぜその意味になるか、日本人が誤解しやすい点…',
+    say: 'set your sights on', // 読み上げに渡す文字列（term と違う場合のみ）
+    examples: [ { o: 'Inflation eased.', j: 'インフレは鈍化した。' } ]
+  } ],
+  zh: [...], es: [...], fr: [...]
+}
+```
+
+`term` が「llevar + 期間 + gerundio」のように説明的な見出しになる場合は、
+`say` に読み上げ用の自然な一文を入れてください。
 
 ---
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>WEEKLY GLOBAL LANGUAGES — 世界を読む、4つの言語で</title>
-<meta name="description" content="英語・中国語・スペイン語・フランス語で世界の「今」を読む週刊多言語学習マガジン。日本語訳・語彙・文法解説を原文のすぐ隣に表示します。">
+<meta name="description" content="英語・中国語・スペイン語・フランス語で世界の「今」を学ぶ週刊マガジン。各言語20語の単語リスト、文法解説、原文記事。">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="assets/icons/icon-192.png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/icons/icon-180.png">
@@ -23,56 +23,29 @@
 
 <a class="skip" href="#main">本文へスキップ</a>
 
-<header class="masthead">
-  <div class="mast-inner">
-    <div class="mast-id">
-      <h1 class="wordmark">WEEKLY<br><em>Global</em> Languages</h1>
-      <p class="mast-sub" id="issueLine">読み込み中…</p>
-    </div>
-    <p class="mast-tag">世界で起きている面白いことを知りたいから、<br>その国のことばで読む。</p>
+<!-- 上：言語の切り替え -->
+<header class="topbar">
+  <div class="topbar-in">
+    <h1 class="brand"><span>WEEKLY</span> <em>Global</em> Languages</h1>
+    <button class="icon-btn" id="btnTheme" type="button" title="配色を切り替え" aria-label="配色を切り替え">◐</button>
   </div>
-
-  <nav class="langbar" id="langbar" aria-label="言語で絞り込み"></nav>
-
-  <div class="studybar" role="group" aria-label="学習表示の設定">
-    <span class="studybar-label">学習モード</span>
-    <label class="tgl"><input type="checkbox" id="tJa" checked><span>日本語訳</span></label>
-    <label class="tgl"><input type="checkbox" id="tVocab" checked><span>語彙</span></label>
-    <label class="tgl"><input type="checkbox" id="tGram" checked><span>文法</span></label>
-    <label class="tgl"><input type="checkbox" id="tPinyin" checked><span>ピンイン</span></label>
-    <label class="tgl"><input type="checkbox" id="tLit"><span>直訳</span></label>
-    <span class="studybar-sep"></span>
-    <button class="mini" id="btnListen" type="button" title="この号を通して聞く">🎧 通して聞く</button>
-    <button class="mini" id="btnAudio" type="button" title="速度・声・リピートの設定" aria-expanded="false">⚙︎ 音声設定</button>
-    <button class="mini" id="btnQuiz" type="button" title="訳を隠して読解に挑戦">🙈 訳を隠して読む</button>
-    <button class="mini" id="btnTheme" type="button" title="配色を切り替え">◐ 表示</button>
-  </div>
+  <nav class="langpills" id="langpills" aria-label="言語を選ぶ"></nav>
 </header>
 
-<div class="shell">
-  <aside class="toc" id="toc" aria-label="目次">
-    <button class="toc-close" id="tocClose" type="button" aria-label="目次を閉じる">×</button>
-  </aside>
+<main id="main" class="view" tabindex="-1"></main>
 
-  <main id="main" class="stage" tabindex="-1"></main>
-</div>
+<!-- 下：タブ -->
+<nav class="tabbar" id="tabbar" aria-label="表示を切り替え"></nav>
 
-<button class="toc-fab" id="tocFab" type="button" aria-label="目次を開く">☰ 目次</button>
-
+<div class="sheet" id="sheet" role="dialog" aria-label="詳細" hidden></div>
 <div class="pop" id="pop" role="dialog" aria-label="語彙の詳細" hidden></div>
-
 <div class="audio-panel" id="audioPanel" role="dialog" aria-label="読み上げの設定" hidden></div>
-
 <div class="player" id="player" role="region" aria-label="読み上げプレーヤー" hidden></div>
-
-<footer class="colophon">
-  <p><strong>WEEKLY GLOBAL LANGUAGES</strong> — 記事本文は報道された事実にもとづき本誌が独自に書き下ろした学習用テキストです。原記事の翻訳・転載ではありません。出典は各記事末尾に掲載しています。</p>
-  <p class="tiny">音声読み上げはブラウザの音声合成エンジンを利用します。対象言語の音声が端末に入っていない場合は再生されないことがあります。</p>
-</footer>
 
 <script src="assets/speech.js"></script>
 <script src="assets/app.js"></script>
 <script src="content/issues/2026-w36/issue.js"></script>
+<script src="content/issues/2026-w36/words.js"></script>
 <script src="content/issues/2026-w36/en.js"></script>
 <script src="content/issues/2026-w36/zh.js"></script>
 <script src="content/issues/2026-w36/es.js"></script>
