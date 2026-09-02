@@ -1,0 +1,16 @@
+{
+  "name": "WEEKLY GLOBAL LANGUAGES",
+  "short_name": "GLOBAL",
+  "description": "英語・中国語・スペイン語・フランス語で世界の「今」を読む週刊多言語学習マガジン。日本語訳・語彙・文法解説を原文のすぐ隣に表示します。",
+  "lang": "ja",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#faf7f2",
+  "theme_color": "#15140f",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
