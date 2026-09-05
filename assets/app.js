@@ -7,16 +7,17 @@
   'use strict';
 
   var LANGS = {
-    en: { label: 'English',  ja: '英語',       color: 'var(--lang-en)', flag: '🇬🇧' },
-    zh: { label: '中文',      ja: '中国語',     color: 'var(--lang-zh)', flag: '🇨🇳' },
-    es: { label: 'Español',  ja: 'スペイン語', color: 'var(--lang-es)', flag: '🇪🇸' },
-    fr: { label: 'Français', ja: 'フランス語', color: 'var(--lang-fr)', flag: '🇫🇷' }
+    en: { label: 'English',  short: 'EN', ja: '英語',       flag: '🇬🇧' },
+    zh: { label: '中文',      short: '中', ja: '中国語',     flag: '🇨🇳' },
+    es: { label: 'Español',  short: 'ES', ja: 'スペイン語', flag: '🇪🇸' },
+    fr: { label: 'Français', short: 'FR', ja: 'フランス語', flag: '🇫🇷' }
   };
   var LANG_ORDER = ['en', 'zh', 'es', 'fr'];
   var TABS = [
-    { id: 'words',   icon: '🗂', label: '単語' },
-    { id: 'grammar', icon: '📐', label: '文法' },
-    { id: 'read',    icon: '📰', label: '記事' }
+    { id: 'words',   icon: '◉', label: '単語' },
+    { id: 'list',    icon: '≡', label: '一覧' },
+    { id: 'grammar', icon: '⌗', label: '文法' },
+    { id: 'read',    icon: '▤', label: '記事' }
   ];
 
   var issue = null;
@@ -82,128 +83,256 @@
   function registerArticles(list) { list.forEach(function (a) { articles.push(a); }); }
 
   /* ============================================================
-     単語タブ
+     単語 — 画面をタップするだけで進む
+       1回目のタップ … 意味を出す
+       2回目のタップ … 次の語へ（出た瞬間に自動で発音）
      ============================================================ */
 
-  function wordKey(code, i) { return 'done:' + code + ':' + i; }
+  var deck = { i: 0, open: false, seen: 0, started: false, end: false };
+
+  function starKey(code, i) { return 'star:' + code + ':' + i; }
+  function isStar(code, i) { return store(starKey(code, i)) === '1'; }
+  function starCount(code) {
+    return (words[code] || []).filter(function (_, i) { return isStar(code, i); }).length;
+  }
+  function autoOn() { return store('autoplay') !== '0'; }
+
+  function say(w) {
+    if (!WGLSpeech.supported) return;
+    WGLSpeech.play([{ lang: lang, text: w.say || w.term }], { onState: drawPlayer, onEnd: drawPlayer });
+  }
 
   function renderWords() {
     var list = words[lang] || [];
-    var wrap = h('div', 'wordview');
-    var L = langOf(lang);
+    if (deck.i >= list.length) deck.i = 0;
+    document.body.classList.remove('reading');
 
-    var done = list.filter(function (_, i) { return store(wordKey(lang, i)) === '1'; }).length;
+    var root = h('div', 'play');
 
-    var nIdiom = list.filter(function (w) { return w.kind === '熟語'; }).length;
-    var head = h('div', 'wv-head');
-    head.innerHTML =
-      '<div class="wv-title"><h2>今週の' + list.length + '語</h2>' +
-      '<p>' + esc(L.ja) + '｜単語 ' + (list.length - nIdiom) + '・熟語 ' + nIdiom + '</p></div>' +
-      '<div class="wv-count"><b id="wvDone">' + done + '</b><span>/ ' + list.length + '</span></div>';
-    wrap.appendChild(head);
+    /* 上：細い進捗だけ */
+    var top = h('div', 'p-top');
+    top.innerHTML = '<span class="p-line"><i style="width:' +
+      Math.round((deck.end ? list.length : deck.i) / list.length * 100) + '%"></i></span>' +
+      '<span class="p-count"><b>' + (deck.end ? list.length : deck.i + 1) + '</b> / ' + list.length + '</span>';
+    root.appendChild(top);
 
-    var tools = h('div', 'wv-tools');
-    var hideBtn = h('button', 'chip-btn', '🙈 意味を隠す');
-    hideBtn.type = 'button';
-    var hidden = store('wordsHidden') === '1';
-    function applyHide() {
-      document.body.classList.toggle('hide-meaning', hidden);
-      hideBtn.setAttribute('aria-pressed', String(hidden));
-      hideBtn.textContent = hidden ? '👀 意味を表示' : '🙈 意味を隠す';
-      store('wordsHidden', hidden ? '1' : '0');
+    root.appendChild(deck.end ? endScreen(list) : tapArea(list[deck.i], list));
+    root.appendChild(bottomBar(list));
+    return root;
+  }
+
+  function tapArea(w, list) {
+    var area = h('div', 'p-tap fade-in');
+    area.setAttribute('role', 'button');
+    area.tabIndex = 0;
+    area.setAttribute('aria-label', deck.open ? 'タップで次の語へ' : 'タップで意味を見る');
+
+    var term = w.pinyin ? ruby(w.term, w.pinyin) : esc(w.term);
+    var head =
+      '<span class="p-kind">' + esc(w.kind) + '</span>' +
+      '<h2 class="p-term">' + term + '</h2>' +
+      (w.pos ? '<span class="p-pos">' + esc(w.pos) + '</span>' : '');
+
+    if (!deck.started) {
+      area.innerHTML = head + '<span class="p-cue blink">タップして始める</span>';
+    } else if (!deck.open) {
+      area.innerHTML = head + '<span class="p-cue blink">タップで意味</span>';
+    } else {
+      area.innerHTML = head +
+        '<div class="p-ans">' +
+          '<p class="p-ja">' + esc(w.ja) + '</p>' +
+          (w.note ? '<p class="p-note">' + esc(w.note) + '</p>' : '') +
+          (w.examples || []).map(function (e) {
+            return '<div class="p-ex"><i>' + esc(plain(e.o)) + '</i><em>' + esc(e.j) + '</em>' +
+              '<button type="button" data-say="' + esc(plain(e.o)) + '" aria-label="例文を聞く">🔊</button></div>';
+          }).join('') +
+        '</div>' +
+        '<span class="p-cue">タップで次へ →</span>';
     }
-    hideBtn.addEventListener('click', function () { hidden = !hidden; applyHide(); });
-    applyHide();
 
-    var playAllBtn = h('button', 'chip-btn', '🔊 20語を続けて聞く');
-    playAllBtn.type = 'button';
-    playAllBtn.addEventListener('click', function () {
-      var items = list.map(function (w, i) {
-        return { lang: lang, text: w.say || w.term, el: document.getElementById('w-' + lang + '-' + i) };
-      });
-      WGLSpeech.play(items, SPEECH_HOOKS);
+    area.addEventListener('click', function (e) {
+      if (e.target.closest('button')) return;
+      step(list);
     });
+    area.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); step(list); }
+    });
+    Array.prototype.forEach.call(area.querySelectorAll('[data-say]'), function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        WGLSpeech.play([{ lang: lang, text: b.dataset.say }], { onState: drawPlayer, onEnd: drawPlayer });
+      });
+    });
+    return area;
+  }
 
-    var audioBtn = h('button', 'chip-btn', '⚙︎ 音声');
-    audioBtn.type = 'button';
-    audioBtn.id = 'btnAudio';
-    audioBtn.setAttribute('aria-expanded', 'false');
-
-    tools.appendChild(hideBtn);
-    tools.appendChild(playAllBtn);
-    tools.appendChild(audioBtn);
-    wrap.appendChild(tools);
-
-    var ul = h('ul', 'cards');
-    list.forEach(function (w, i) { ul.appendChild(wordCard(w, i)); });
-    wrap.appendChild(ul);
-
-    if (issue && issue.meta) {
-      wrap.appendChild(h('p', 'wv-foot',
-        'Vol. ' + esc(issue.meta.volume) + '｜' + esc(issue.meta.dateRange) +
-        '<br>語はすべて、今週の記事から選んでいます。'));
+  /** タップ1回ぶんの前進 */
+  function step(list) {
+    if (!deck.started) {
+      deck.started = true;
+      WGLSpeech.unlock();
+      render();
+      if (autoOn()) say(list[deck.i]);
+      return;
     }
+    if (!deck.open) { deck.open = true; render(); return; }
+
+    /* 次の語へ */
+    var area = document.querySelector('.p-tap');
+    if (area) area.classList.add('leaving');
+    deck.seen++;
+    setTimeout(function () {
+      deck.open = false;
+      if (deck.i + 1 >= list.length) { deck.end = true; render(); return; }
+      deck.i++;
+      render();
+      if (autoOn()) say(list[deck.i]);
+    }, 150);
+  }
+
+  function bottomBar(list) {
+    var bar = h('div', 'p-bot');
+
+    var langs = h('div', 'p-langs');
+    LANG_ORDER.forEach(function (code) {
+      var b = h('button', null, esc(langOf(code).short));
+      b.type = 'button';
+      b.dataset.code = code;
+      b.setAttribute('aria-pressed', String(code === lang));
+      b.setAttribute('aria-label', langOf(code).ja);
+      b.addEventListener('click', function () { switchLang(code); });
+      langs.appendChild(b);
+    });
+    bar.appendChild(langs);
+
+    var acts = h('div', 'p-acts');
+
+    if (!deck.end) {
+      var star = h('button', 'star', isStar(lang, deck.i) ? '★' : '☆');
+      star.type = 'button';
+      star.setAttribute('aria-pressed', String(isStar(lang, deck.i)));
+      star.setAttribute('aria-label', 'あとで復習する印');
+      star.addEventListener('click', function () {
+        var on = !isStar(lang, deck.i);
+        store(starKey(lang, deck.i), on ? '1' : '0');
+        star.textContent = on ? '★' : '☆';
+        star.setAttribute('aria-pressed', String(on));
+      });
+      acts.appendChild(star);
+
+      var sound = h('button', null, '🔊');
+      sound.type = 'button';
+      sound.setAttribute('aria-label', 'もう一度聞く');
+      sound.addEventListener('click', function () { say(list[deck.i]); });
+      acts.appendChild(sound);
+    }
+
+    var gear = h('button', null, '⚙');
+    gear.type = 'button'; gear.id = 'btnAudio';
+    gear.setAttribute('aria-expanded', 'false');
+    gear.setAttribute('aria-label', '音声の設定');
+    acts.appendChild(gear);
+
+    bar.appendChild(acts);
+    return bar;
+  }
+
+  function switchLang(code) {
+    lang = code;
+    deck.i = 0; deck.open = false; deck.end = false; deck.seen = 0;
+    render();
+    if (deck.started && autoOn()) say((words[lang] || [])[0]);
+  }
+
+  function endScreen(list) {
+    var box = h('div', 'p-end');
+    var stars = starCount(lang);
+    box.innerHTML =
+      '<h2>' + list.length + '語おわり</h2>' +
+      '<p>' + esc(langOf(lang).ja) + '｜' + (stars ? '★をつけた語が ' + stars + ' 個あります' : 'おつかれさまでした') + '</p>';
+
+    var btns = h('div', 'btns');
+    var again = h('button', 'main', 'もう一周');
+    again.type = 'button';
+    again.addEventListener('click', function () {
+      deck.i = 0; deck.open = false; deck.end = false; render();
+      if (autoOn()) say(list[0]);
+    });
+    btns.appendChild(again);
+
+    if (stars) {
+      var only = h('button', null, '★だけ もう一周（' + stars + '）');
+      only.type = 'button';
+      only.addEventListener('click', function () {
+        var first = list.findIndex(function (_, k) { return isStar(lang, k); });
+        deck.i = first < 0 ? 0 : first;
+        deck.open = false; deck.end = false; deck.starOnly = true;
+        render();
+        if (autoOn()) say(list[deck.i]);
+      });
+      btns.appendChild(only);
+    }
+
+    var nextLang = LANG_ORDER[(LANG_ORDER.indexOf(lang) + 1) % LANG_ORDER.length];
+    var go = h('button', null, langOf(nextLang).ja + 'へ');
+    go.type = 'button';
+    go.addEventListener('click', function () { switchLang(nextLang); });
+    btns.appendChild(go);
+
+    box.appendChild(btns);
+    return box;
+  }
+
+  /* ---------- 一覧 ---------- */
+
+  function renderList() {
+    var list = words[lang] || [];
+    document.body.classList.add('reading');
+    var wrap = h('div');
+
+    var head = h('div', 'rhead');
+    head.innerHTML = '<div><h2>' + esc(langOf(lang).ja) + 'の' + list.length + '語</h2>' +
+      '<p>★ ' + starCount(lang) + ' 個</p></div>';
+    var back = h('button', null, '← カード');
+    back.type = 'button';
+    back.style.cssText = 'font-size:13px;color:var(--accent)';
+    back.addEventListener('click', function () { tab = 'words'; render(); });
+    head.appendChild(back);
+    wrap.appendChild(head);
+    wrap.appendChild(langRow());
+
+    var ul = h('ul', 'wlist');
+    list.forEach(function (w, i) {
+      var li = h('li', isStar(lang, i) ? 'star' : '');
+      li.innerHTML =
+        '<div class="w-t"><span class="w-term">' + (w.pinyin ? ruby(w.term, w.pinyin) : esc(w.term)) + '</span>' +
+        '<span class="w-ja">' + esc(w.ja) + '</span></div>' +
+        '<button class="w-s" type="button" aria-label="発音を聞く">🔊</button>';
+      li.querySelector('.w-s').addEventListener('click', function (e) {
+        e.stopPropagation();
+        WGLSpeech.play([{ lang: lang, text: w.say || w.term }], { onState: drawPlayer, onEnd: drawPlayer });
+      });
+      li.addEventListener('click', function () {
+        deck.i = i; deck.open = false; deck.end = false;
+        tab = 'words'; render();
+        if (deck.started && autoOn()) say(w);
+      });
+      ul.appendChild(li);
+    });
+    wrap.appendChild(ul);
     return wrap;
   }
 
-  function wordCard(w, i) {
-    var li = h('li', 'card');
-    li.id = 'w-' + lang + '-' + i;
-    li.dataset.lang = lang;
-    li.style.setProperty('--c', langOf(lang).color);
-
-    var isDone = store(wordKey(lang, i)) === '1';
-    if (isDone) li.classList.add('done');
-
-    var term = w.pinyin
-      ? '<span class="c-term">' + ruby(w.term, w.pinyin) + '</span>'
-      : '<span class="c-term">' + esc(w.term) + '</span>';
-
-    var meta = '<span class="c-kind ' + (w.kind === '熟語' ? 'k-idiom' : 'k-word') + '">' + esc(w.kind) + '</span>';
-    if (w.pos) meta += '<span class="c-pos">' + esc(w.pos) + '</span>';
-
-    li.innerHTML =
-      '<div class="c-top">' +
-        '<div class="c-head">' + term + '<div class="c-meta">' + meta + '</div></div>' +
-        '<div class="c-btns">' +
-          '<button class="c-say" type="button" aria-label="発音を聞く">🔊</button>' +
-          '<button class="c-done" type="button" aria-label="覚えた" aria-pressed="' + isDone + '">✓</button>' +
-        '</div>' +
-      '</div>' +
-      '<p class="c-ja">' + esc(w.ja) + '</p>' +
-      (w.note ? '<p class="c-note">' + esc(w.note) + '</p>' : '') +
-      (w.examples || []).map(function (e) {
-        return '<div class="c-ex"><i>' + esc(plain(e.o)) + '</i><em>' + esc(e.j) + '</em>' +
-               '<button class="c-say-ex" type="button" data-say="' + esc(plain(e.o)) + '" aria-label="例文を聞く">🔊</button></div>';
-      }).join('');
-
-    li.querySelector('.c-say').addEventListener('click', function () {
-      WGLSpeech.play([{ lang: lang, text: w.say || w.term, el: li }], SPEECH_HOOKS);
+  function langRow() {
+    var row = h('div', 'rlangs');
+    LANG_ORDER.forEach(function (code) {
+      var b = h('button', null, esc(langOf(code).short));
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(code === lang));
+      b.addEventListener('click', function () { lang = code; render(); });
+      row.appendChild(b);
     });
-    li.querySelector('.c-done').addEventListener('click', function (e) {
-      var on = !li.classList.contains('done');
-      li.classList.toggle('done', on);
-      e.currentTarget.setAttribute('aria-pressed', String(on));
-      store(wordKey(lang, i), on ? '1' : '0');
-      var n = el('wvDone');
-      if (n) {
-        var list = words[lang] || [];
-        n.textContent = list.filter(function (_, k) { return store(wordKey(lang, k)) === '1'; }).length;
-      }
-    });
-    Array.prototype.forEach.call(li.querySelectorAll('.c-say-ex'), function (b) {
-      b.addEventListener('click', function () {
-        WGLSpeech.play([{ lang: lang, text: b.dataset.say, el: li }], SPEECH_HOOKS);
-      });
-    });
-
-    /* 「意味を隠す」中は、カードを押すとその1枚だけ開く */
-    li.addEventListener('click', function (e) {
-      if (!document.body.classList.contains('hide-meaning')) return;
-      if (e.target.closest('button')) return;
-      li.classList.toggle('show');
-    });
-    return li;
+    return row;
   }
 
   /* ============================================================
@@ -231,13 +360,15 @@
   }
 
   function renderGrammar() {
-    var wrap = h('div', 'gramview');
+    document.body.classList.add('reading');
+    var wrap = h('div');
     var L = langOf(lang);
     var groups = grammarGroups(lang);
     var total = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
 
-    wrap.appendChild(h('div', 'wv-head',
-      '<div class="wv-title"><h2>文法解説</h2><p>' + esc(L.ja) + '｜' + total + ' 項目</p></div>'));
+    wrap.appendChild(h('div', 'rhead',
+      '<div><h2>文法</h2><p>' + esc(L.ja) + '｜' + total + ' 項目</p></div>'));
+    wrap.appendChild(langRow());
 
     groups.forEach(function (g, gi) {
       var d = h('details', 'gsec');
@@ -286,18 +417,20 @@
      ============================================================ */
 
   function renderRead() {
-    var wrap = h('div', 'readview');
+    document.body.classList.add('reading');
+    var wrap = h('div');
     var L = langOf(lang);
     var list = articles.filter(function (a) { return a.lang === lang; });
 
-    wrap.appendChild(h('div', 'wv-head',
-      '<div class="wv-title"><h2>今週の記事</h2><p>' + esc(L.ja) + '｜' + list.length + ' 本</p></div>'));
+    wrap.appendChild(h('div', 'rhead',
+      '<div><h2>記事</h2><p>' + esc(L.ja) + '｜' + list.length + ' 本</p></div>'));
+    wrap.appendChild(langRow());
 
-    var tools = h('div', 'wv-tools');
+    var tools = h('div', 'rtools');
     ['tJa|日本語訳|no-ja', 'tVocab|語彙|no-voc', 'tGram|文法|no-gram', 'tPinyin|ピンイン|no-pin']
       .forEach(function (spec) {
         var p = spec.split('|');
-        var b = h('button', 'chip-btn', p[1]);
+        var b = h('button', null, p[1]);
         b.type = 'button';
         var off = store('r:' + p[0]) === '0';
         function apply() {
@@ -331,7 +464,7 @@
     art.appendChild(head);
 
     if (WGLSpeech.supported) {
-      var listen = h('button', 'chip-btn listen', '▶ この記事を聞く');
+      var listen = h('button', 'chip', '▶ 読み上げ');
       listen.type = 'button';
       listen.addEventListener('click', function () {
         WGLSpeech.play(itemsFrom(art.querySelectorAll('.sent')), SPEECH_HOOKS);
@@ -488,6 +621,9 @@
 
     panel.innerHTML =
       '<button class="x" type="button" aria-label="閉じる">×</button><h6>読み上げの設定</h6>' +
+      '<div class="a-row"><span class="a-lang">語が出たら自動で発音</span>' +
+        '<select data-auto><option value="1"' + (autoOn() ? ' selected' : '') + '>する</option>' +
+        '<option value="0"' + (autoOn() ? '' : ' selected') + '>しない</option></select></div>' +
       sel('rate', [[0.5,'0.5×'],[0.6,'0.6×'],[0.7,'0.7×'],[0.8,'0.8×'],[0.9,'0.9×'],[1,'1×'],[1.1,'1.1×']],
           WGLSpeech.prefs.rate, '速度') +
       sel('repeat', [[1,'1回'],[2,'2回'],[3,'3回'],[4,'4回'],[5,'5回']], WGLSpeech.prefs.repeat, 'リピート') +
@@ -529,6 +665,7 @@
       var t = e.target;
       if (t.dataset.set) WGLSpeech.set(t.dataset.set, t.value);
       else if (t.dataset.voice) WGLSpeech.setVoice(t.dataset.voice, t.value);
+      else if (t.hasAttribute('data-auto')) store('autoplay', t.value);
     });
     WGLSpeech.onVoicesReady(function () { if (!panel.hidden) drawAudioPanel(); });
   }
@@ -575,19 +712,19 @@
     main.style.setProperty('--c', langOf(lang).color);
 
     if (tab === 'words') main.appendChild(renderWords());
+    else if (tab === 'list') main.appendChild(renderList());
     else if (tab === 'grammar') main.appendChild(renderGrammar());
     else main.appendChild(renderRead());
 
     store('lang', lang);
     store('tab', tab);
+    var top = el('topbar');
+    if (top) top.hidden = (tab === 'words');
     global.scrollTo(0, 0);
     paintNav();
   }
 
   function paintNav() {
-    Array.prototype.forEach.call(el('langpills').children, function (b) {
-      b.setAttribute('aria-pressed', String(b.dataset.code === lang));
-    });
     Array.prototype.forEach.call(el('tabbar').children, function (b) {
       b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false');
     });
@@ -600,17 +737,6 @@
     if (savedLang && LANGS[savedLang]) lang = savedLang;
     var savedTab = store('tab');
     if (savedTab && TABS.some(function (t) { return t.id === savedTab; })) tab = savedTab;
-
-    var pills = el('langpills');
-    LANG_ORDER.forEach(function (code) {
-      var L = langOf(code);
-      var b = h('button', null, '<span class="pf">' + L.flag + '</span>' + esc(L.label));
-      b.type = 'button';
-      b.dataset.code = code;
-      b.style.setProperty('--c', L.color);
-      b.addEventListener('click', function () { lang = code; render(); });
-      pills.appendChild(b);
-    });
 
     var bar = el('tabbar');
     TABS.forEach(function (t) {
