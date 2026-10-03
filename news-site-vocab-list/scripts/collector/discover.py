@@ -140,6 +140,11 @@ def discover(fetcher: Fetcher, site: dict, log) -> list[Candidate]:
     tried_auto = False
     seen: set[str] = set()
     out: list[Candidate] = []
+    for page in site.get("link_pages", []):  # フィードもサイトマップも使えないサイトの記事一覧ページ
+        for c in homepage_links(fetcher, page, site.get("link_pattern")):
+            if c.url not in seen:
+                seen.add(c.url)
+                out.append(c)
     i = 0
     while True:
         if i >= len(sources):
@@ -176,8 +181,8 @@ def discover(fetcher: Fetcher, site: dict, log) -> list[Candidate]:
 _ARTICLE_PATH = re.compile(r"/(19|20)\d{2}[/-]?\d{2}|\d{6,}|/[a-z0-9]+(-[a-z0-9]+){3,}", re.I)
 
 
-def homepage_links(fetcher: Fetcher, home: str) -> list[Candidate]:
-    """最後の手段：トップページ（公式記事一覧）から記事らしいURLを集める。"""
+def homepage_links(fetcher: Fetcher, home: str, pattern: str | None = None) -> list[Candidate]:
+    """トップページ（公式記事一覧）から記事らしいURLを集める。pattern があればそれに合うURLだけ。"""
     try:
         r = fetcher.get(home)
         doc = lhtml.fromstring(r.content)
@@ -188,6 +193,8 @@ def homepage_links(fetcher: Fetcher, home: str) -> list[Candidate]:
     for a in doc.xpath("//a[@href]"):
         url = urljoin(r.url, a.get("href")).split("#")[0]
         if host not in url.split("/")[2] or url in seen or not _ARTICLE_PATH.search(url):
+            continue
+        if pattern and not re.search(pattern, url):
             continue
         seen.add(url)
         out.append(Candidate(url, " ".join(a.text_content().split())))
