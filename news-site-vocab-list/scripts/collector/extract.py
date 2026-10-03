@@ -14,7 +14,7 @@ _BOILERPLATE = re.compile(
     r"|advertisement|advert|sponsored|share( this)?( article| on .+)?|follow us.*|sign up.*newsletter.*"
     r"|read more:?.*|related( articles| stories| topics)?:?|more on this story|top stories|most read"
     r"|watch:.*|listen:.*|image (source|caption),.*|getty images|reuters|afp|pa media|ap"
-    r"|publicité|partager|lire aussi.*|à lire aussi.*|voir aussi.*|abonnez-vous.*|newsletter.*"
+    r"|publicité|(passer la publicité\s*)+|partager|lire aussi.*|à lire aussi.*|voir aussi.*|abonnez-vous.*|newsletter.*"
     r"|publicidad|compartir|lee también.*|leer más.*|te puede interesar.*|más información.*|suscríbete.*"
     r"|广告|分享|相关新闻.*|相关报道.*|延伸阅读.*|推荐阅读.*|热门.*|订阅.*|图像来源.*|图片来源.*)$",
     re.I,
