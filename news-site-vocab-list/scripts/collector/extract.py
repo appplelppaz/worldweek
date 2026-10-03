@@ -19,6 +19,11 @@ _BOILERPLATE = re.compile(
     r"|广告|分享|相关新闻.*|相关报道.*|延伸阅读.*|推荐阅读.*|热门.*|订阅.*|图像来源.*|图片来源.*)$",
     re.I,
 )
+# BBC の著者情報ブロック（Article Information / Author, … / Role, … / Reporting from, … / 阅读时间: n 分钟）
+_BYLINE = re.compile(
+    r"^・?(article information|(author|role|reporting from)\s*[,，].*|(阅读|閱讀)时间\s*[:：].*|閱讀時間\s*[:：].*)$",
+    re.I,
+)
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 _CTRL = re.compile(r"[\u0000-\u0008\u000b-\u001f\u007f-\u009f​-‏  ﻿]")
@@ -83,6 +88,8 @@ def extract(content: bytes, url: str) -> Extracted | None:
             continue
         heading = text.startswith("#")
         text = text.lstrip("#").strip()
+        if len(text) < 80 and _BYLINE.match(text):
+            continue
         if len(text) < 60 and _BOILERPLATE.match(text):
             continue
         key = re.sub(r"\W+", "", text.lower())

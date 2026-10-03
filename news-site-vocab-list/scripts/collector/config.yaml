@@ -2,6 +2,7 @@
 # feeds:     RSS / Atom / 公式JSON。上から順に試す。
 # sitemaps:  フィードで足りないときに使うニュースサイトマップ。
 # どちらも取れない場合は、トップページの <link rel="alternate"> と robots.txt の Sitemap を自動で探す。
+# url_rewrite: 発見した記事URLに順に適用する正規表現置換（pattern → replace）。
 
 user_agent: "Mozilla/5.0 (compatible; vocab-collector/1.0; personal language-learning use)"
 
@@ -119,6 +120,9 @@ sites:
       home: https://www.bbc.com/zhongwen/simp
       feeds:
         - https://feeds.bbci.co.uk/zhongwen/simp/rss.xml
+      url_rewrite:            # simp のフィードでも記事URLが /trad（繁体字）で返るため簡体字版に読み替える
+        - pattern: "/trad(?=$|[?#])"
+          replace: "/simp"
     - id: nhk_zh
       name: NHK WORLD-JAPAN 中文
       home: https://www3.nhk.or.jp/nhkworld/zh/news/

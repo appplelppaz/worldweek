@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -32,6 +33,13 @@ class Budget:
                 self.left -= 1
 
 
+def rewrite_url(url: str, rules: list[dict] | None) -> str:
+    """config.yaml の url_rewrite（pattern → replace の正規表現置換）を順に適用する。"""
+    for rule in rules or []:
+        url = re.sub(rule["pattern"], rule["replace"], url)
+    return url
+
+
 def collect_site(cfg: dict, lang: str, site: dict, fetcher: Fetcher, store: Store,
                  per_site: int, budget: Budget) -> dict:
     c = cfg["collect"]
@@ -40,6 +48,8 @@ def collect_site(cfg: dict, lang: str, site: dict, fetcher: Fetcher, store: Stor
     max_fetch = int(per_site * 1.5) + 1  # 除外が出ても取りすぎないよう、ダウンロード数にも上限
     try:
         cands = discover(fetcher, site, log)
+        for x in cands:
+            x.url = rewrite_url(x.url, site.get("url_rewrite"))
         cutoff = datetime.now(timezone.utc) - timedelta(days=c["max_age_days"])
         cands = [x for x in cands if x.published is None or x.published >= cutoff]
         # 新しい記事を優先（日付不明は後ろ）

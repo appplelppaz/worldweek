@@ -75,7 +75,9 @@ def judge(ex: Extracted | None, lang: str, min_chars: int) -> tuple[str, str | N
     body = sum(len(p) for p in ex.paragraphs if not p.startswith(("## ", "[写真]")))
     if body < min_chars:
         return "rejected", ("blocked_short" if blocked else "too_short"), blocked
-    if len(ex.paragraphs) >= 8 and body / len(ex.paragraphs) < 45:
+    # 中国語は1文字あたりの情報量が多く段落も短いので基準を下げる
+    min_avg = 20 if lang == "zh" else 45
+    if len(ex.paragraphs) >= 8 and body / len(ex.paragraphs) < min_avg:
         return "rejected", "list_or_gallery", blocked  # 短い行の羅列（一覧・写真ギャラリー）
     if not _lang_ok(ex.text, lang):
         return "rejected", "wrong_language", blocked
