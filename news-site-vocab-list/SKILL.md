@@ -1,11 +1,11 @@
 ---
 name: "news-site-vocab-list"
-description: "ニュースサイトをChromeで回遊して英語・フランス語・中国語・スペイン語の語彙リスト（4列TSV）を作り、Google Driveのflash cardフォルダ内の言語別サブフォルダに保存する。「サイトから語彙リストを作って」「BBC/Guardian/Le Monde/El País/BBC中文から単語リスト」などで使う。"
+description: "ニュースサイトの記事をPythonで収集して英語・フランス語・中国語・スペイン語の語彙リスト（4列TSV）を作り、Google Driveのflash cardフォルダ内の言語別サブフォルダに保存する。「サイトから語彙リストを作って」「BBC/Guardian/Le Monde/El País/BBC中文から単語リスト」などで使う。"
 ---
 
 # ニュースサイト → フラッシュカード語彙リスト
 
-最新のニュース記事をChromeで読み、学習者のレベルに合った語彙・慣用表現のリストを作ります。言語ごとに複数のサイトから集めます。できたリストはフラッシュカードアプリ用のTSVとして、Google Driveの言語別フォルダに保存します。
+最新のニュース記事をPythonで収集して読み、学習者のレベルに合った語彙・慣用表現のリストを作ります。言語ごとに複数のサイトから集めます。できたリストはフラッシュカードアプリ用のTSVとして、Google Driveの言語別フォルダに保存します。
 
 ## 0. 最初に必ず質問する（AskUserQuestion）
 
@@ -57,34 +57,61 @@ description: "ニュースサイトをChromeで回遊して英語・フランス
 5. La Vanguardia — https://www.lavanguardia.com
 6. BBC News Mundo — https://www.bbc.com/mundo
 
-## 2. Chromeで記事を回遊する
+## 2. Pythonで記事を集めてClaudeに渡す
 
-1. ChromeのツールをToolSearchでまとめて読み込む：tabs_context_mcp、navigate、get_page_text、read_page、find、browser_batch、javascript_tool、tabs_close_mcp。
-2. `tabs_context_mcp(createIfEmpty:true)` を呼ぶ。複数のブラウザがあるというエラーが出たら、ツールの指示どおりAskUserQuestionで選んでもらう。ユーザーが「1つしか開いていない」と答えた場合は `switch_browser` を使う。
-3. 記事URLの抽出：トップページで `javascript_tool` を使い、当日・前日の日付を含むリンクを集める（例：`[...new Set([...document.querySelectorAll('a')].map(a=>a.href).filter(h=>/20261001|20260930/.test(h)))]`）。出力が切れる場合は `window._u` に保存して1件ずつ表示するか、`read_page(filter:"all", depth:40)` の保存ファイルからPythonで抜き出す。
-4. 記事は `browser_batch` で4本ずつ読む（navigate + get_page_text の組）。`permission_required` が出たら、まず navigate を単独で呼んでから batch に戻る。本文が読めた記事を、目標語数に対して目安で次の本数まで集める。
-   - 300語：本文が読めた記事を12〜16本（複数サイト合計）
-   - 100語：6本程度
-   - ニュース・論説・書評・文化・科学など、分野を混ぜて選ぶ。
-5. 読み終えたらタブを閉じる。
+記事の発見・ページ取得・本文抽出・不要ページと重複記事の除外は、このスキルの `scripts/collector` が行う。Claude はサイトを開いたり、どの記事を読むか判断したりしない。Claude が読むのは、Python が作った「バッチ」ファイル（言語・記事ID・タイトル・本文だけ）だけ。
 
-### 制限にかかったときは次のサイトへ
+### 2-1. 準備（初回のみ）
 
-次のような表示が出た記事は「ブロック」と数える。
+```bash
+cd <このSKILL.mdがあるフォルダ>/scripts
+pip install -q -r requirements.txt
+```
 
-- 例：Subscribe to read、Sign in to keep reading、This is not a paywall、Réservé aux abonnés、Il vous reste XX% de cet article à lire、La suite est réservée aux abonnés、Regístrate gratis para seguir leyendo、Suscríbete para seguir leyendo、本文が冒頭数段落で途切れる、閲覧回数の上限表示。
+取得履歴・ログ・バッチは `~/.vocab-collector`（環境変数 `VOCAB_COLLECTOR_HOME` で変更可）に保存される。履歴があるので、前回処理した記事は二度と渡されない。
 
-判断と対応：
+### 2-2. 記事を集める
 
-- 1サイトで読んだ記事の半分以上がブロックなら、リストの次のサイトに移る。
-- それまでに読めた本文や冒頭部分はそのまま使ってよい。
-- 複数サイトを合わせて必要な記事数を集める。
+1. 手順0・1で決めたサイトのID（`scripts/collector/config.yaml` の `id`）を登録順に指定して実行する。サイトの指定がなければ `--sites` を省いて全サイト。
 
-やってはいけないこと：
+   ```bash
+   python3 -m collector collect --lang en --sites bbc,guardian,independent --per-site 6
+   ```
 
-- ログイン、アカウント作成、購読、Cookie同意の「すべて許可」はしない。
-- 読めない記事をWebFetch、curl、アーカイブサイトなどで取得しようとしない。
-- 「Permission denied」が出た場合は、ユーザーに Chrome の拡張機能設定（chrome://extensions → Claude → サイトへのアクセス → 特定のサイト）に `*://<ドメイン>/*` を追加してもらい、そのあと拡張の許可ダイアログで「常に許可」を選んでもらう。追加後に再試行する。拡張機能の設定は自分では変更しない。
+   - 言語コード：英語 `en` / フランス語 `fr` / 中国語 `zh` / スペイン語 `es`
+   - 記事数の目安は従来と同じ：300語なら本文が読めた記事を合計12〜16本（`--per-site` × サイト数で調整）、100語なら6本程度。1サイトの上限は20本。
+   - 出力の各行がサイトごとの結果。`outcome` が `ok` 以外（`paywalled`＝半分以上が購読制限、`no_candidates`、`too_many_errors`、`site_error`）のサイトは自動で打ち切られ、次のサイトに進んでいる。
+   - 最後の `READY n` が、まだClaudeに渡していない記事の本数。足りなければ、まだ使っていない登録サイトを `--sites` に指定して追加で実行する。
+2. 購読制限・ログイン・Cookie同意などの操作はしない。読めない記事を別の方法で取りに行かない（Python側でも取得しない）。
+3. すべてのサイトで取得に失敗する場合（ネットワーク制限など）は、ユーザーに `collect` の出力を見せて相談する。
+
+### 2-3. バッチ単位で語彙を作る（目標に届いたら止める）
+
+1. 次のバッチを作る。
+
+   ```bash
+   python3 -m collector next-batch --lang en
+   ```
+
+   `BATCH <バッチID> articles=… chars=…` と、バッチファイルのパスが表示される。そのファイルを Read で読み、手順3の基準で語彙を抜き出して `b1.tsv`、`b2.tsv`… に書き出す。記事中の `### a12 | タイトル` の `a12` は記事ID。
+
+2. そのバッチの語彙を書き終えたら処理済みにする（次回以降このバッチの記事は渡されない）。
+
+   ```bash
+   python3 -m collector done --batch <バッチID>
+   ```
+
+   途中で中断して語彙を作れなかったときだけ `release --batch <バッチID>` で未処理に戻す。
+
+3. ここまでの候補を結合し、手順3と同じ方法でファイル内・既存リストとの重複を除いた件数を数える。
+   - 目標数の約1.05〜1.2倍に届いた → 記事の追加取得・バッチ作成をやめて、手順3の調整に進む。
+   - 届いていない → 1に戻る。`NO_READY_ARTICLES` と出たら、2-2で未使用の登録サイトから追加で集めてから1に戻る（`--max-total` で必要な本数だけ取得できる）。
+
+`python3 -m collector status --lang en` でサイトごとの件数（ready / processed / rejected / duplicate / error）を確認できる。抽出結果を人が確認したいときは `python3 -m collector show --id 12`。
+
+### 付録：Pythonで取得できないサイト
+
+Pythonでは取得できず、どうしてもそのサイトを使う必要がある場合に限り、ユーザーに確認してから以前のChromeでの手順（ChromeのツールをToolSearchで読み込み、記事ページを navigate + get_page_text で読む）を使う。その場合もログイン・購読・Cookie同意の「すべて許可」はしない。
 
 ## 3. 語彙リストを作る
 
