@@ -2,6 +2,8 @@
 # feeds:     RSS / Atom / 公式JSON。上から順に試す。
 # sitemaps:  フィードで足りないときに使うニュースサイトマップ。
 # どちらも取れない場合は、トップページの <link rel="alternate"> と robots.txt の Sitemap を自動で探す。
+# link_pages: RSSもサイトマップも robots.txt で禁止または更新停止のサイト用。記事一覧ページのリンクを候補にする。
+# link_pattern: link_pages から拾うURLの条件（正規表現）。
 # url_rewrite: 発見した記事URLに順に適用する正規表現置換（pattern → replace）。
 
 user_agent: "Mozilla/5.0 (compatible; vocab-collector/1.0; personal language-learning use)"
@@ -153,8 +155,8 @@ sites:
     - id: elpais
       name: El País
       home: https://elpais.com
-      feeds:
-        - https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada
+      sitemaps:               # feeds.elpais.com は robots.txt が 403 で全面禁止扱い → elpais.com のニュースサイトマップを使う
+        - https://elpais.com/sitemaps/news.xml
     - id: elmundo
       name: El Mundo
       home: https://www.elmundo.es
@@ -168,8 +170,10 @@ sites:
     - id: rtve
       name: RTVE.es
       home: https://www.rtve.es/noticias/
-      feeds:
-        - https://api2.rtve.es/rss/temas_noticias.xml
+      # RSS（api2.rtve.es）は robots.txt で禁止、ニュースサイトマップは更新停止 → ニュースのトップページから記事リンクを拾う
+      link_pages:
+        - https://www.rtve.es/noticias/
+      link_pattern: "^https://www\\.rtve\\.es/(noticias|deportes)/\\d{8}/"
     - id: lavanguardia
       name: La Vanguardia
       home: https://www.lavanguardia.com
