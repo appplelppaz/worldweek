@@ -1,210 +1,58 @@
-# WEEKLY GLOBAL LANGUAGES
+# news-site-vocab-list
 
-**世界で起きている面白いことを知りたいから、その国のことばで読む。**
+ニュース記事から語学学習用の語彙リスト（4列TSV）を作り、Google Drive に保存するスキルです。
 
-英語・中国語・スペイン語・フランス語で世界の「今」を学ぶ、日本人向けの週刊マガジンです。
-世界の最新ニュースから抜き出した語彙を、**タップするだけでどんどん**覚えるWebアプリ。
-文法解説と原文記事も付いています。ブラウザで開くだけで動きます。
+今回の変更は **記事の収集部分だけ** です。Claude in Chrome がサイトを開いて記事を探し、本文を読んでいた処理を、Python（`scripts/collector`）に置き換えました。
+学習者レベル・語彙の選び方・約300語・TSV形式・重複語彙の除外・ファイル名・Google Drive の保存先と保存方法（SKILL.md の手順0・1・3〜6）は変えていません。
 
----
+```
+登録サイト（config.yaml、SKILL.md の24サイトと同じ）
+  ↓ RSS / 公式JSON / ニュースサイトマップ / トップページ（この順に試す）
+記事候補（新しい順。履歴にあるURL・記事IDは取りに行かない）
+  ↓ robots.txt 確認、1ホスト2秒間隔、タイムアウト・再試行上限つきで取得
+本文抽出（trafilatura）→ ナビ・広告・関連記事・SNS・定型文・重複段落を除去
+  ↓ 短すぎる・動画・ギャラリー・エラー・ログイン・一覧・言語違い・購読制限 → 除外
+重複除外（URL正規化／記事ID／本文ハッシュ／SimHash／段落の一致率）
+  ↓
+バッチ（言語・記事ID・タイトル・本文だけ。本数と文字数の上限は config.yaml）
+  ↓
+Claude：既存の手順3で語彙作成 → 目標数に届いたら追加取得をやめる
+  ↓
+既存の手順4・5で Google Drive に保存
+```
+
+## 構成
+
+| パス | 内容 |
+|---|---|
+| `news-site-vocab-list/SKILL.md` | スキル本体。変更したのは「2. Pythonで記事を集めてClaudeに渡す」と、説明文中の「Chromeで」の部分だけ |
+| `news-site-vocab-list/scripts/collector/config.yaml` | サイト一覧・取得間隔・上限・バッチサイズなどの設定 |
+| `scripts/collector/fetch.py` | HTTP取得（robots.txt、アクセス間隔、タイムアウト、再試行） |
+| `scripts/collector/discover.py` | 記事候補の発見 |
+| `scripts/collector/extract.py` | 本文抽出と整形 |
+| `scripts/collector/filters.py` | 不要ページの除外 |
+| `scripts/collector/dedup.py` | 重複判定 |
+| `scripts/collector/store.py` | 取得履歴（SQLite） |
+| `scripts/collector/batch.py` | Claude に渡すバッチの作成 |
 
 ## 使い方
 
-`index.html` をブラウザで開くだけです。ビルドもサーバーも要りません。
-スマートフォンで読む方法は [iPhone / スマートフォンで読む](#iphone--スマートフォンで読む) を参照してください。
-
 ```bash
-# そのまま開く
-open index.html          # macOS
-xdg-open index.html      # Linux
-start index.html         # Windows
-
-# ローカルサーバー経由で見たい場合
-python3 -m http.server 8000   # → http://localhost:8000
+cd news-site-vocab-list/scripts
+pip install -r requirements.txt
+python3 -m collector collect --lang en --sites bbc --per-site 15   # 記事を集める
+python3 -m collector next-batch --lang en                          # Claudeに渡すバッチを作る
+python3 -m collector done --batch <バッチID>                        # 処理済みにする
+python3 -m collector status --lang en                              # サイトごとの件数
+python3 -m collector show --id 12                                  # 抽出結果を確認
 ```
 
----
+履歴・ログ（`collector.log`）・バッチは `~/.vocab-collector`（`VOCAB_COLLECTOR_HOME` で変更可）に置かれます。
 
-## 4つのタブ
+## 設定（config.yaml）
 
-下のタブで画面を切り替えます。言語は画面内で切り替えます。設定はブラウザに保存されます。
-
-### ◉ 単語（起動時の画面）
-
-**画面をタップするだけ**で語彙が進みます。ボタンを選ぶ必要はありません。
-
-```
-▬▬▬░░░░░░░░░░░           3 / 20
-
-              単語
-           biǎo shì
-            表 示            ← 出た瞬間に自動で発音
-             動詞
-
-        （タップで意味）
-
-  EN 中 ES FR        ☆  🔊  ⚙
-```
-
-| 操作 | はたらき |
-|---|---|
-| 画面をタップ（1回目） | 意味・説明・例文が出る |
-| もう一度タップ | 次の語へ。**出た瞬間に自動で発音** |
-| ☆ | あとで復習する印。20語の最後に「★だけもう一周」が出ます |
-| 🔊 | もう一度聞く |
-| ⚙ | 自動発音の有無、速度、言語ごとの声 |
-| EN 中 ES FR | 言語を変える |
-
-20語を終えると「もう一周」「★だけもう一周」「次の言語へ」を選べます。
-はじめて開いたときだけ、画面のタップで音が有効になります
-（iOS は最初のタップまで音を鳴らせない決まりのためです）。
-
-### ≡ 一覧
-
-20語を一覧で確認できます。語をタップすると、その語から単語モードが始まります。
-
-### ⌗ 文法
-
-その言語の文法解説を、記事ごと・テーマごとにまとめてあります。
-なぜその形になるのか、他の形とどう違うのかまで書いてあります。例文には音声ボタンつき。
-
-### ▤ 記事
-
-原文を1文ずつ、日本語訳・語彙・文法とともに読む画面です。
-上のボタンで **訳／語彙／文法／ピンイン** を個別に消せます。読みたいときだけ開いてください。
-
----
-
-## iPhone / スマートフォンで読む
-
-### 1. GitHub Pages で公開する（おすすめ）
-
-このリポジトリは静的サイトなので、そのまま GitHub Pages で配信できます。
-
-1. GitHub でリポジトリを開く → **Settings** → 左メニューの **Pages**
-2. **Source** を `Deploy from a branch` にする
-3. **Branch** を `main` / `/ (root)` にして **Save**
-4. 1〜2分待つと `https://<ユーザー名>.github.io/<リポジトリ名>/` で読めるようになります
-
-以後は `main` に push するたびに自動で更新されます。
-（公開リポジトリなら無料です。非公開リポジトリで Pages を使うには有料プランが必要です。）
-
-### 2. ホーム画面に追加する
-
-Safari でそのURLを開き、共有ボタン → **ホーム画面に追加**。
-アドレスバーのないアプリのような画面で開き、アイコンは「GLOBAL」として並びます。
-
-ノッチとホームインジケータを避ける余白、指で押せる大きさのボタン、
-1行に畳んだヘッダーとプレーヤーは、この使い方に合わせてあります。
-
-### 3. 読み上げについて（iOS の注意点）
-
-iOS は**最初の一度、画面のどこかをタップするまで音声が鳴りません**（Safari の仕様）。
-本アプリは最初のタップで合成エンジンを起こすようにしてあるので、
-🔊 や「通して聞く」を押した時点で解錠され、以降は普通に鳴ります。
-
-声は端末に入っているものを使います。足りない言語は
-**設定 → アクセシビリティ → 読み上げコンテンツ → 声** から追加できます。
-また、**サイレントスイッチがオンだと再生されない**ことがあります。鳴らないときは最初にここを確認してください。
-
-### 4. サーバーを立てずに手元で見る
-
-同じ Wi-Fi のパソコンで `python3 -m http.server 8000` を実行し、
-iPhone から `http://<パソコンのIP>:8000` を開く方法もあります。
-
----
-
-## 誌面の構成
-
-| セクション | 内容 |
-|---|---|
-| COVER | 今週を象徴する話題 |
-| THE WORLD THIS WEEK | 4言語の短い見出しで今週を一望 |
-| ENGLISH WORLD / 中文世界 / MUNDO EN ESPAÑOL / LE MONDE FRANCOPHONE | 各言語の記事（1本ずつが完結した教材） |
-| GLOBAL FEATURE | 同じ出来事を4言語の報道で読み比べる特集 |
-| LANGUAGE LAB | 今号でとくに持ち帰る価値のある語彙・文法 |
-| REAL-WORLD CONVERSATION | その場で使える質問と答え方 |
-| LISTENING & SHADOWING | 音読に向く一文と、発音の練習ポイント |
-| WEEKLY REVIEW | 復習問題。**答えだけでなく「なぜそうなるか」まで** |
-
-各記事は `WHY THIS STORY MATTERS`（なぜ今この話題か）→ `ORIGINAL ARTICLE`（原文＋訳＋解説）→ `JAPANESE GUIDE`（背景を日本語で）→ `LANGUAGE DEEP DIVE`（語彙・文法・文化）→ `SENTENCE BREAKDOWN`（難文の分解）→ `TRY IT YOURSELF`（作文練習）→ `TALK ABOUT IT`（会話）→ `SOURCES`（出典）という構成です。
-
----
-
-## リポジトリの構成
-
-```
-index.html                        誌面（これを開く）
-manifest.webmanifest              ホーム画面に追加したときの設定
-assets/icons/                     アプリアイコン
-assets/style.css                  スタイル（ライト／ダーク対応）
-assets/speech.js                  読み上げエンジン（連続再生・リピート・声の選択）
-assets/app.js                     レンダラー
-content/issues/2026-w36/
-  ├── words.js                    今週の20語 × 4言語（単語タブの中身）
-  ├── issue.js                    号の骨格：表紙・今週の世界・特集・ラボ・会話・音読・復習
-  ├── en.js  zh.js  es.js  fr.js  各言語セクションの記事
-  └── MASTER.md                   MASTER EDITORIAL VERSION（自動生成・校正用）
-tools/
-  ├── load.mjs                    号データのローダー
-  ├── validate.mjs                整合性チェック
-  └── build-master.mjs            MASTER.md の生成
-docs/
-  ├── SCHEMA.md                   記事データの書き方
-  └── EDITORIAL.md                編集方針と制作手順
-```
-
-記事データは `content/issues/<号>/` の JS ファイルが唯一の情報源で、`MASTER.md` はそこから生成されます。
-Markdown を直接編集しないでください（次回生成時に上書きされます）。
-
----
-
-## 号を編集する・新しい号を作る
-
-```bash
-# 1. 整合性をチェック（出典・訳の欠落・{{markup}} と語彙の対応・ピンインの音節数などを検査）
-node tools/validate.mjs content/issues/2026-w36
-
-# 2. 校正用の Markdown を生成
-node tools/build-master.mjs content/issues/2026-w36
-```
-
-新しい号を作るときは `content/issues/` にディレクトリを足し、`index.html` の `<script>` の読み込み先を差し替えてください。
-データの書式は [`docs/SCHEMA.md`](docs/SCHEMA.md)、編集方針と制作手順は [`docs/EDITORIAL.md`](docs/EDITORIAL.md) にあります。
-
-`validate.mjs` は CI でも使えます（エラーがあれば終了コード 1）。
-
----
-
-## 収録している号
-
-**Vol.1 — 2026年8月26日〜9月1日**
-
-- 🇬🇧 シーイン香港上場／英国史上最も暑い夏と、市民が名づけた嵐
-- 🇨🇳 太陽光の設備容量が石炭火力を超えた日／タジキスタンの「漢語熱」
-- 🇪🇸 メッシ、代表に別れを告げる（アルゼンチン）／タコのピザとガリシアの町（スペイン）
-- 🇫🇷 スマホなしの新学期／超ファストファッションへの課金
-
-記事8本・原文77文・語彙190項目・文法229項目・出典15件。
-
----
-
-## 編集上の約束
-
-- 記事本文は、報道された事実にもとづき**本誌が独自に書き下ろした学習用テキスト**です。原記事の翻訳・転載ではありません。
-- 存在しないニュース・人物・発言・数字・URLは掲載しません。確認できない情報は書きません。
-- 出典には媒体名・記事名・公開日・URL・参照日を必ず明記します。
-- 語彙・文法の解説に数量の上限は設けません。説明する価値があれば取り上げます。
-
----
-
-## 技術的なこと
-
-- 依存ライブラリなし。素の HTML / CSS / JavaScript のみ（ES5相当）。
-- `file://` で直接開けます（データは JS として読み込むため fetch を使いません）。
-- 読み上げは Web Speech API を利用します。対象言語の音声が端末にない場合、その言語は再生されません。
-  長文が途中で切れる Chrome の既知の問題には、定期的に `resume()` を送る形で対処しています。
-- 表示設定は `localStorage` に保存されます。
-- 印刷用スタイルを同梱（折りたたみは展開され、ナビゲーションは省かれます）。
-- iOS 向けに、セーフエリア（ノッチ・ホームインジケータ）の余白、`viewport-fit=cover`、
-  ホーム画面追加用の manifest とアイコン、音声合成の解錠処理を入れてあります。
+- `collect.per_site_limit`：1サイトで集める記事の上限（既定15）。ダウンロード数はその1.5倍まで
+- `collect.max_age_days`：これより古い記事は候補にしない（既定3日）
+- `batch.max_articles` / `batch.max_chars` / `batch.article_max_chars`：Claude に一度に渡す本数・文字数
+- `filter.min_chars`：これより短い本文は除外
+- `http.*`：タイムアウト、再試行回数、アクセス間隔、同時に処理するサイト数

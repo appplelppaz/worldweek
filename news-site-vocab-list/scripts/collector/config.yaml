@@ -1,0 +1,178 @@
+# 記事収集の設定。サイトは SKILL.md「1. サイト一覧」と同じ24サイト（追加・変更していない）。
+# feeds:     RSS / Atom / 公式JSON。上から順に試す。
+# sitemaps:  フィードで足りないときに使うニュースサイトマップ。
+# どちらも取れない場合は、トップページの <link rel="alternate"> と robots.txt の Sitemap を自動で探す。
+
+user_agent: "Mozilla/5.0 (compatible; vocab-collector/1.0; personal language-learning use)"
+
+http:
+  connect_timeout: 6        # 秒
+  read_timeout: 20          # 秒
+  max_retries: 2            # 再試行の上限（タイムアウト・5xx・429のみ）
+  backoff_seconds: 3        # 再試行の待ち時間（回数に応じて倍）
+  min_interval_seconds: 2.0 # 同じホストへのアクセス間隔（robots.txt の Crawl-delay が長ければそちら）
+  parallel_sites: 2         # 同時に処理するサイト数（1サイト内は常に1本ずつ）
+
+collect:
+  per_site_limit: 15        # 1サイトで本文を取得する記事の上限（最初のテストは10〜20）
+  max_age_days: 3           # 日付が分かる記事のうち、これより古いものは候補にしない
+  blocked_ratio_to_skip: 0.5   # 読んだ記事の半分以上が購読制限ならそのサイトを打ち切る
+  blocked_min_sample: 4        # 上の判定を始めるまでに読む記事数
+  max_error_attempts: 3     # 失敗した記事を次回以降に再試行する上限
+
+filter:
+  min_chars:                # 本文がこれより短い記事は除外
+    en: 1200
+    fr: 1200
+    es: 1200
+    zh: 300                 # NHK中文は記事が短いため低め
+  near_duplicate_hamming: 4 # 本文SimHashのハミング距離がこれ以下なら重複扱い
+
+batch:                      # Claude に一度に渡す量（後から変更可）
+  max_articles: 5
+  max_chars:                # 1バッチの本文合計の上限（文字数）
+    en: 22000
+    fr: 22000
+    es: 22000
+    zh: 9000
+  article_max_chars:        # 長い記事は段落の切れ目でここまでに切る
+    en: 7000
+    fr: 7000
+    es: 7000
+    zh: 3000
+
+sites:
+  en:
+    - id: bbc
+      name: BBC News
+      home: https://www.bbc.com/news
+      feeds:
+        - https://feeds.bbci.co.uk/news/rss.xml
+        - https://feeds.bbci.co.uk/news/world/rss.xml
+        - https://feeds.bbci.co.uk/news/science_and_environment/rss.xml
+        - https://feeds.bbci.co.uk/news/business/rss.xml
+    - id: guardian
+      name: The Guardian
+      home: https://www.theguardian.com
+      feeds:
+        - https://www.theguardian.com/uk/rss
+        - https://www.theguardian.com/world/rss
+    - id: telegraph
+      name: The Telegraph
+      home: https://www.telegraph.co.uk
+      feeds:
+        - https://www.telegraph.co.uk/rss.xml
+      sitemaps:
+        - https://www.telegraph.co.uk/custom/daily-news/sitemap.xml
+    - id: independent
+      name: The Independent
+      home: https://www.independent.co.uk
+      feeds:
+        - https://www.independent.co.uk/news/rss
+    - id: ft
+      name: Financial Times
+      home: https://www.ft.com
+      feeds:
+        - https://www.ft.com/rss/home
+    - id: sky
+      name: Sky News
+      home: https://news.sky.com
+      feeds:
+        - https://feeds.skynews.com/feeds/rss/home.xml
+        - https://feeds.skynews.com/feeds/rss/world.xml
+
+  fr:
+    - id: lemonde
+      name: Le Monde
+      home: https://www.lemonde.fr
+      feeds:
+        - https://www.lemonde.fr/rss/une.xml
+    - id: lefigaro
+      name: Le Figaro
+      home: https://www.lefigaro.fr
+      feeds:
+        - https://www.lefigaro.fr/rss/figaro_actualites.xml
+    - id: liberation
+      name: Libération
+      home: https://www.liberation.fr
+      feeds:
+        - https://www.liberation.fr/arc/outboundfeeds/rss-all/?outputType=xml
+    - id: franceinfo
+      name: Franceinfo
+      home: https://www.francetvinfo.fr
+      feeds:
+        - https://www.francetvinfo.fr/titres.rss
+    - id: leparisien
+      name: Le Parisien
+      home: https://www.leparisien.fr
+      feeds:
+        - https://feeds.leparisien.fr/leparisien/rss
+    - id: rfi_fr
+      name: RFI
+      home: https://www.rfi.fr/fr/
+      feeds:
+        - https://www.rfi.fr/fr/rss
+
+  zh:
+    - id: bbc_zh
+      name: BBC News 中文
+      home: https://www.bbc.com/zhongwen/simp
+      feeds:
+        - https://feeds.bbci.co.uk/zhongwen/simp/rss.xml
+    - id: nhk_zh
+      name: NHK WORLD-JAPAN 中文
+      home: https://www3.nhk.or.jp/nhkworld/zh/news/
+      feeds:
+        - https://www3.nhk.or.jp/nhkworld/data/zh/news/all.json
+    - id: dw_zh
+      name: DW 中文網
+      home: https://www.dw.com/zh/
+      feeds:
+        - https://rss.dw.com/rdf/rss-chi-all
+    - id: rfi_cn
+      name: RFI 華語
+      home: https://www.rfi.fr/cn/
+      feeds:
+        - https://www.rfi.fr/cn/rss
+    - id: voa_zh
+      name: VOA 中文網
+      home: https://www.voachinese.com
+      feeds:
+        - https://www.voachinese.com/api/
+    - id: swissinfo_zh
+      name: swissinfo.ch 中文
+      home: https://www.swissinfo.ch/chi
+      sitemaps:
+        - https://www.swissinfo.ch/chi/sitemap-news.xml
+
+  es:
+    - id: elpais
+      name: El País
+      home: https://elpais.com
+      feeds:
+        - https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada
+    - id: elmundo
+      name: El Mundo
+      home: https://www.elmundo.es
+      feeds:
+        - https://e00-elmundo.uecdn.es/elmundo/rss/portada.xml
+    - id: abc
+      name: ABC
+      home: https://www.abc.es
+      feeds:
+        - https://www.abc.es/rss/2.0/portada/
+    - id: rtve
+      name: RTVE.es
+      home: https://www.rtve.es/noticias/
+      feeds:
+        - https://api2.rtve.es/rss/temas_noticias.xml
+    - id: lavanguardia
+      name: La Vanguardia
+      home: https://www.lavanguardia.com
+      feeds:
+        - https://www.lavanguardia.com/rss/home.xml
+    - id: bbc_mundo
+      name: BBC News Mundo
+      home: https://www.bbc.com/mundo
+      feeds:
+        - https://feeds.bbci.co.uk/mundo/rss.xml
